@@ -1,0 +1,1962 @@
+<html lang="en"><head>
+<meta charset="UTF-8">
+<title>WSU Resume Feedback Editor</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root{
+    --wsu-gold:#ffcc00;
+    --ink:#111;
+  }
+  body{
+    margin:0; font-family:Arial, Helvetica, sans-serif; height:100vh; display:flex; flex-direction:column;
+    /* WSU yellow -> white gradient */
+    background:linear-gradient(to bottom, var(--wsu-gold), #fff);
+  }
+  header{
+    background:#fff; border-bottom:2px solid var(--wsu-gold);
+    display:flex; align-items:center; gap:10px; padding:10px 12px;
+  }
+  header h1{ margin:0; font-size:1.25rem; }
+  .toolbar{ margin-left:auto; display:flex; flex-wrap:wrap; gap:8px; align-items:center }
+  button, select, label.inline{
+    appearance:none; border:1px solid #ddd; background:#000; color:#fff; border-radius:8px; padding:8px 12px; cursor:pointer; font-weight:600;
+  }
+  button.secondary{ background:#fff; color:#000 }
+  label.inline{ display:inline-flex; gap:8px; align-items:center; background:#fff; color:#000; border-radius:8px; padding:6px 10px; border:1px solid #ddd; }
+  label.inline input{ margin:0 }
+  main{ flex:1; display:flex; min-height:0 }
+  #sections-container{
+    flex:1; padding:12px; border-right:2px solid var(--wsu-gold); overflow:auto; background:rgba(255,255,255,.85);
+  }
+  #generator{
+    width:34%; min-width:300px; max-width:560px; padding:12px; display:flex; flex-direction:column; gap:10px; background:#fff;
+  }
+  #generated{ flex:1; width:100%; resize:vertical; border:1px solid #ddd; border-radius:10px; padding:10px; white-space:pre-wrap }
+  .section{
+    border:1px solid #ddd; border-radius:12px; background:#fff; margin:12px 0;
+  }
+  .section-header{
+    display:flex; align-items:center; gap:8px; padding:8px 10px; background:#f5f5f5; border-bottom:1px solid #eee; border-radius:12px 12px 0 0;
+  }
+  .section-title[contenteditable="true"], .sub-title[contenteditable="true"], .fb-text[contenteditable="true"]{
+    outline:2px dashed rgba(0,0,0,.15); outline-offset:2px; background:#fffbeb; border-radius:6px; padding:0 4px;
+  }
+  .badge{ font-size:.75rem; background:#fff; border:1px solid #ddd; color:#333; border-radius:999px; padding:2px 8px }
+  .drag-handle{ user-select:none; color:var(--wsu-gold); font-weight:900; cursor:grab }
+  .row-actions{ margin-left:auto; display:flex; gap:6px; align-items:center }
+  .row-actions .mini{ padding:6px 8px; font-size:.85rem; border-radius:8px; border:1px solid #ddd; background:#fff; color:#000 }
+  .row-actions .danger{ background:#fff; color:#b91c1c; border-color:#ef4444 }
+  .subheading{
+    margin:10px; border:1px dashed #ddd; border-radius:10px; padding:8px; background:#fcfcfc;
+  }
+  .sub-head{
+    display:flex; align-items:center; gap:8px; margin-bottom:6px;
+  }
+  .feedback{
+    display:flex; align-items:flex-start; gap:8px; margin:6px 0; background:#fffef7; border:1px solid #eee; border-radius:10px; padding:8px;
+  }
+  .feedback .fb-check{ margin-top:3px }
+  .placeholder{
+    height:12px; margin:8px 0; border:2px dashed var(--wsu-gold); border-radius:8px; background:#fffbe6;
+  }
+  .dragging{ opacity:.5 }
+  .hint{ color:#666; font-size:.85rem }
+  /* Edit-only controls visibility */
+  .edit-only{ display:none }
+  body.edit-mode .edit-only{ display:inline-flex }
+  body.edit-mode .fb-check{ display:none }
+  body:not(.edit-mode) .drag-handle{ cursor:default }
+  select.role{ background:#fff; color:#000; border:1px solid #ddd; border-radius:8px; padding:6px 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>WSU Resume Feedback Editor</h1>
+  <div class="toolbar">
+    <button id="toggleMode" class="secondary">Switch to Edit Mode</button>
+    <button id="saveLayout" class="secondary">Save Layout Changes</button>
+    <button id="addSection" class="secondary edit-only">+ Section</button>
+    <button id="exportLayout" class="secondary">Export Layout (.json)</button>
+    <button id="importLayout" class="secondary">Import Layout</button>
+    <button id="shareLayout" class="secondary">Share Current Layout</button>
+    <label class="inline"><input type="checkbox" id="includeHeaders" checked=""> Include headers in output</label>
+    <button id="copyBtn" class="secondary">Copy</button>
+    <button id="txtBtn" class="secondary">Download .txt</button>
+    <button id="docBtn" class="secondary">Download .doc</button>
+  </div>
+</header>
+
+<main>
+  <div id="sections-container" aria-live="polite"><div class="section" data-level="section" data-role="normal" draggable="false"><div class="section-header">
+      <span class="drag-handle" title="Drag section">☰</span>
+      <strong class="section-title" contenteditable="false">Opening Paragraph</strong>
+      <span class="badge">Normal</span>
+      <select class="role edit-only" title="Section role">
+        <option value="normal" selected="">Normal</option>
+        <option value="opening">Opening</option>
+        <option value="closing">Closing</option>
+      </select>
+      <span class="row-actions">
+        <button class="mini edit-only" data-act="add-sub" title="Add subheading">+ Subheading</button>
+        <button class="mini edit-only danger" data-act="del-section" title="Delete section">Delete</button>
+      </span></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Level 1:</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Use Resume Feedback Email Template on the student’s
+profile.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Level 2:</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Thank you for
+uploading your resume to Shocker Central. Each resume is reviewed by a trained
+staff member with the Shocker Career Accelerator to ensure your document meets
+industry standards. It is clear you have put a considerable amount of effort
+into your document. You have plenty of valuable information presented, but here
+are a few tips and suggested changes to make your resume more appealing to
+employers.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Level 3:</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Thank you for uploading your resume to Shocker Central. Each
+resume is reviewed by a trained staff member with the Shocker Career
+Accelerator to ensure your document meets industry standards. I can tell you have taken a lot of
+time working on your document. First, I would recommend tailoring your resume
+to the job you are seeking and uploading your resume to the website jobscan.co.
+Additionally, you have plenty of valuable information presented, but multiple
+changes will need to be made to make your resume more appealing to employers.
+Without these changes, there is no guarantee your document will meet industry
+standards for your future job applications.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Non PDF Submissions</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Please upload your document in Shocker Central as a PDF in
+order to receive direct feedback. If you have questions or would like to set up
+an appointment with the Shocker Career Accelerator, call our main office at
+316-978-3688. (Note: Shocker Central will direct you to download a document if
+it is not in PDF format.)</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Resubmit</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Hello [student], while all of the information in your resume is valuable to your job search,&nbsp;most employers and job websites use an AI (Artificial Intelligence) technology called the Applicant Tracking System (ATS) to scan documents for potential candidates. Columns, tables, charts, color blocks, paragraphs, images, logos, color font, break lines, etc. can confuse the system and make it difficult for employers to find your document. Please reformat your resume using our templates at: https://www.wichita.edu/resumetemplates before resubmitting. The current formatting of your resume is not ATS-friendly and may result in a decrease in job opportunities. Please reformat your resume using our templates before resubmitting your resume. https://www.wichita.edu/resumetemplates.I look forward to seeing your changes!</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div></div><div class="section" data-level="section" data-role="normal" draggable="false"><div class="section-header">
+      <span class="drag-handle" title="Drag section">☰</span>
+      <strong class="section-title" contenteditable="false">Quick Formatting</strong>
+      <span class="badge">Normal</span>
+      <select class="role edit-only" title="Section role">
+        <option value="normal" selected="">Normal</option>
+        <option value="opening">Opening</option>
+        <option value="closing">Closing</option>
+      </select>
+      <span class="row-actions">
+        <button class="mini edit-only" data-act="add-sub" title="Add subheading">+ Subheading</button>
+        <button class="mini edit-only danger" data-act="del-section" title="Delete section">Delete</button>
+      </span></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">New Subheading</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Most employers and job websites use an AI (Artificial
+Intelligence) technology called the Applicant Tracking System (ATS) to scan
+documents for potential candidates. Columns, tables, charts, color blocks,
+paragraphs, images, logos, color font, break lines, etc. can confuse the system
+and make it difficult for employers to find your document. Please reformat your
+resume using our templates at: https://www.wichita.edu/resumetemplates
+before resubmitting.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Please reformat your resume using our templates before
+resubmitting your resume. https://www.wichita.edu/resumetemplates</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div></div><div class="section" data-level="section" data-role="normal" draggable="false"><div class="section-header">
+      <span class="drag-handle" title="Drag section">☰</span>
+      <strong class="section-title" contenteditable="false">Header</strong>
+      <span class="badge">Normal</span>
+      <select class="role edit-only" title="Section role">
+        <option value="normal" selected="">Normal</option>
+        <option value="opening">Opening</option>
+        <option value="closing">Closing</option>
+      </select>
+      <span class="row-actions">
+        <button class="mini edit-only" data-act="add-sub" title="Add subheading">+ Subheading</button>
+        <button class="mini edit-only danger" data-act="del-section" title="Delete section">Delete</button>
+      </span></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Header/ Name</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Your contact information should include your name, a professional email, city and state, LinkedIn URL, and phone number.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Your contact information should be together at the top of the page.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Your contact information should only be included on the first page at the top.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Email</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Use a professional email. If you do not have one, please create one.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Your email is invalid. Use your [wushock@shockers.wichita.edu] email, otherwise, employers will not be able to reach you.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Only use one email, preferably one you can easily find important emails.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Location</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Do not include your full personal address in your contact information for safety reasons. Only include your city and state.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Include your city and state in your header.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Make sure your location is relevant to your current job search.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">LinkedIn</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Remove the numbers from your LinkedIn URL, so it is more professional and easier to search.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Change the LinkedIn link to a LinkedIn URL, so it is more professional and easier to search.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Additional fixes</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Only include your Instagram or YouTube if it relates to your work and degree.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">You do not need to include your WSU student ID.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Remove your photo. Photos on resumes are limited to models and actors.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Remove the title under your heading. This can box you in.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Remove your profile/ objective/ summary statement. This information could be used in your cover letter.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">A professional summary may be appropriate for many employers. However,&nbsp;paragraphs (such as an objective statement or professional summary)&nbsp;on your resume can for the ATS system to parse and extract key information, making your resume less likely to pass through the initial screening stage.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div></div><div class="section" data-level="section" data-role="normal" draggable="false"><div class="section-header">
+      <span class="drag-handle" title="Drag section">☰</span>
+      <strong class="section-title" contenteditable="false">Education</strong>
+      <span class="badge">Normal</span>
+      <select class="role edit-only" title="Section role">
+        <option value="normal" selected="">Normal</option>
+        <option value="opening">Opening</option>
+        <option value="closing">Closing</option>
+      </select>
+      <span class="row-actions">
+        <button class="mini edit-only" data-act="add-sub" title="Add subheading">+ Subheading</button>
+        <button class="mini edit-only danger" data-act="del-section" title="Delete section">Delete</button>
+      </span></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Education</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Your education should include your major/ degree, the academic institution, location, and graduation month and year.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Your education degrees and majors should be capitalized like a title.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Education should be listed first if you are still a student.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Your Wichita State education should be listed first since that is where you are currently going.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Don’t forget to add your Wichita State information to your education section.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Spell out Wichita State University.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Capitalize Wichita State University.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Your high school information can stay for now, however after your first year it will need to be removed. This also includes high school groups, clubs, and organizations.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Remove your secondary/ high school information as it is no longer needed on your resume.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">For your graduation date, only list the expected month and the year.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Your education should be listed in reverse chronological order, with the most recent degree at the top.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Remove your GPA unless it is required by an employer or an academic institution.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Do not forget to include your expected graduation date, be sure to put the month and the year.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Instead of listing “XX-Present” in your education section, only list your expected graduation month and year.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Only include schools where you have obtained a finalized degree, like your Associate's, Bachelor's, etc. degrees. Other education can be discussed if you get the opportunity to attend an interview.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Only include coursework relevant to your degree.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div></div><div class="section" data-level="section" data-role="normal" draggable="false"><div class="section-header">
+      <span class="drag-handle" title="Drag section">☰</span>
+      <strong class="section-title" contenteditable="false">Relevant Experience OR Work Experience</strong>
+      <span class="badge">Normal</span>
+      <select class="role edit-only" title="Section role">
+        <option value="normal" selected="">Normal</option>
+        <option value="opening">Opening</option>
+        <option value="closing">Closing</option>
+      </select>
+      <span class="row-actions">
+        <button class="mini edit-only" data-act="add-sub" title="Add subheading">+ Subheading</button>
+        <button class="mini edit-only danger" data-act="del-section" title="Delete section">Delete</button>
+      </span></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Relevant Experience OR Work Experience</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">In your experience and/or activities section, list your professional title, place of business and location if relevant, and the month and years that you worked there. Underneath your title, list 3-5 concise bullet points of information for your description. Start your bullet points with an action verb that appropriately describes and highlights your skills.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">All information in each section should be listed in reverse chronological order, with the most recent experience listed first.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Remove your interests and hobbies.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Do not use your full work addresses. Only include the city and state.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Do not use more than 5 bullet points for each of your experiences.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Add specific numerical value examples to a few of your bullet points to add depth to your experiences.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Work on expanding your bullet points. You can describe how you did the task (your action verb), what you did specifically, and your impact on the job or result. Example: Managed 10 employees daily, assessed performance, and enhanced the customer experience by meeting customer satisfaction goals in all 4 quarters.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Include a period at the end of each sentence.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Only include experiences from the past 10 years.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Your dates should be listed on the far-right side of the page.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div></div><div class="section" data-level="section" data-role="normal" draggable="false"><div class="section-header">
+      <span class="drag-handle" title="Drag section">☰</span>
+      <strong class="section-title" contenteditable="false">Relevant Skills</strong>
+      <span class="badge">Normal</span>
+      <select class="role edit-only" title="Section role">
+        <option value="normal" selected="">Normal</option>
+        <option value="opening">Opening</option>
+        <option value="closing">Closing</option>
+      </select>
+      <span class="row-actions">
+        <button class="mini edit-only" data-act="add-sub" title="Add subheading">+ Subheading</button>
+        <button class="mini edit-only danger" data-act="del-section" title="Delete section">Delete</button>
+      </span></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Relevant Skills</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">In your skills section, soft skills or personality traits, such as communication, time management, and other descriptive words should not be listed, but instead, incorporated into your experiences. Hard skills, such as software, languages, and CPR should be listed on your resume in list format. Do not use columns or paragraphs.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Add a skills section where you can list your hard skills, such as Microsoft Word, Microsoft Excel, Microsoft PowerPoint, CPR, Google Applications, First Aid, Languages, or other various software applications.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">List your languages under your skills section. Only include English as a language if it isn’t your first language.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Skills should be listed in a list format. Do not use columns and avoid bullet points if possible.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Change the skills in your skills sections to hard skills such as Microsoft word, excel, languages or CPR.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div></div><div class="section" data-level="section" data-role="normal" draggable="false"><div class="section-header">
+      <span class="drag-handle" title="Drag section">☰</span>
+      <strong class="section-title" contenteditable="false">Optional Sections (Coursework, projects, honors, etc.)</strong>
+      <span class="badge">Normal</span>
+      <select class="role edit-only" title="Section role">
+        <option value="normal" selected="">Normal</option>
+        <option value="opening">Opening</option>
+        <option value="closing">Closing</option>
+      </select>
+      <span class="row-actions">
+        <button class="mini edit-only" data-act="add-sub" title="Add subheading">+ Subheading</button>
+        <button class="mini edit-only danger" data-act="del-section" title="Delete section">Delete</button>
+      </span></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Optional Sections (Coursework, projects, honors, etc.)</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">List your awards, honors, leadership, certifications, etc. in reverse chronological order. Don’t forget to include the month and year.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">List your relevant coursework in bullet point or list format.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">List your projects by title, date, and 3-5 bullet points describing the project content.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Call attention to additional relevant experience by adding sections to your resume like organizations, volunteer experiences, awards and honors, professional affiliations, certifications, etc. to make your resume more robust. When doing this, include dates (month and year) that you participated in those events.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Keep the extracurricular/volunteer experience relevant to the positions you are looking to apply for.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">With your extracurricular/volunteer experience, list each experience by title, location, and date. Make sure to include 1-2 bullet points describing your tasks.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div></div><div class="section" data-level="section" data-role="normal" draggable="false"><div class="section-header">
+      <span class="drag-handle" title="Drag section">☰</span>
+      <strong class="section-title" contenteditable="false">Spelling/ Grammar</strong>
+      <span class="badge">Normal</span>
+      <select class="role edit-only" title="Section role">
+        <option value="normal" selected="">Normal</option>
+        <option value="opening">Opening</option>
+        <option value="closing">Closing</option>
+      </select>
+      <span class="row-actions">
+        <button class="mini edit-only" data-act="add-sub" title="Add subheading">+ Subheading</button>
+        <button class="mini edit-only danger" data-act="del-section" title="Delete section">Delete</button>
+      </span></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Spelling/&nbsp; Grammar</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Use past tense verbs when talking about past experiences and
+present tense when talking about current experiences.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Make sure you are capitalizing your degree because it is a
+title.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Do not use “I” and “We” statements in your resume.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Make sure to capitalize the beginning of bullet point and/
+or every bullet point has proper punctuation.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Please upload your document to Grammarly to check the
+spelling and grammar of this document. https://www.grammarly.com/.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div></div><div class="section" data-level="section" data-role="normal" draggable="false"><div class="section-header">
+      <span class="drag-handle" title="Drag section">☰</span>
+      <strong class="section-title" contenteditable="false">Professional Language</strong>
+      <span class="badge">Normal</span>
+      <select class="role edit-only" title="Section role">
+        <option value="normal" selected="">Normal</option>
+        <option value="opening">Opening</option>
+        <option value="closing">Closing</option>
+      </select>
+      <span class="row-actions">
+        <button class="mini edit-only" data-act="add-sub" title="Add subheading">+ Subheading</button>
+        <button class="mini edit-only danger" data-act="del-section" title="Delete section">Delete</button>
+      </span></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Professional Language</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Start your bullet points with an action verb that can enhance the reader’s understanding of tasks, duties, transferable skills, and accomplishments.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Do not use abbreviations in your document.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Vary your action verbs in your experience bullet points. It is important to use a variety of action verbs to showcase a wide range of skills. If you tend to use the same word, try using the synonym of the word.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Tailor your resume to each job you are applying to.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div></div><div class="section" data-level="section" data-role="normal" draggable="false"><div class="section-header">
+      <span class="drag-handle" title="Drag section">☰</span>
+      <strong class="section-title" contenteditable="false">Formatting/ Font</strong>
+      <span class="badge">Normal</span>
+      <select class="role edit-only" title="Section role">
+        <option value="normal" selected="">Normal</option>
+        <option value="opening">Opening</option>
+        <option value="closing">Closing</option>
+      </select>
+      <span class="row-actions">
+        <button class="mini edit-only" data-act="add-sub" title="Add subheading">+ Subheading</button>
+        <button class="mini edit-only danger" data-act="del-section" title="Delete section">Delete</button>
+      </span></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Formatting/ Font</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Most employers and job websites use an AI (Artificial
+Intelligence) technology called the Applicant Tracking System (ATS) to scan
+documents for potential candidates. Columns, tables, charts, color blocks, paragraphs,
+images, logos, color font, etc. can confuse the system and make it difficult
+for employers to find your document. Please reformat your resume using our
+templates at: https://www.wichita.edu/resumetemplates before resubmitting.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Your document should be a standard letter size of 8.5 x 11.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Your resume margin size should be 1 inch all around the document. Adjust accordingly.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">When you use a template, make sure you fill in all sections with your information and delete sections not relevant to you.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Only use a black or dark blue font, so it is easy for employers to read your document.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Use an easily readable font, such as Times New Roman, Calibri, or Arial, with 10-12 pt font.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Make sure your dates are spelled out by month and year. For example, April 2022-May 2023.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Make sure you are using the same font style and size throughout the document.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Your dates should be listed on the far-right side of the page.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Be consistent with your bullet point size and</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">or indentation.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Be consistent with your font color.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">All information in each section should include dates and be listed in reverse chronological order, with the most recent experience listed first.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Add a space after each title or section to make your document less condensed and easier to read. It is okay for your resume to be on two pages.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Paragraph format makes a document difficult to follow, whereas bullet points catch the eye.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Please reformat your resume using our templates before
+resubmitting your resume. https://www.wichita.edu/resumetemplates</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">I recommend renaming your document something professional,
+such as “[your name] Resume 2025”.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Only use bullet points, do not use numbers.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div></div><div class="section" data-level="section" data-role="normal" draggable="false"><div class="section-header">
+      <span class="drag-handle" title="Drag section">☰</span>
+      <strong class="section-title" contenteditable="false">Additional Fixes</strong>
+      <span class="badge">Normal</span>
+      <select class="role edit-only" title="Section role">
+        <option value="normal" selected="">Normal</option>
+        <option value="opening">Opening</option>
+        <option value="closing">Closing</option>
+      </select>
+      <span class="row-actions">
+        <button class="mini edit-only" data-act="add-sub" title="Add subheading">+ Subheading</button>
+        <button class="mini edit-only danger" data-act="del-section" title="Delete section">Delete</button>
+      </span></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Resume Length</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Your resume should be no longer than two pages.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Try fitting your resume onto one page.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">There is a blank page at the end of your document that needs to be removed.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Although it is okay for your resume to be two pages, since you only have a few lines on your second page, try fitting it all onto the first page.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Additional Content</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Remove your references from your resume and only provide these per request on a separate document.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">You do not need to include that your references are available upon request.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Remove your interests and/or hobbies.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Remove your declaration.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div></div><div class="section" data-level="section" data-role="normal" draggable="false"><div class="section-header">
+      <span class="drag-handle" title="Drag section">☰</span>
+      <strong class="section-title" contenteditable="false">Closing Paragraphs</strong>
+      <span class="badge">Normal</span>
+      <select class="role edit-only" title="Section role">
+        <option value="normal" selected="">Normal</option>
+        <option value="opening">Opening</option>
+        <option value="closing">Closing</option>
+      </select>
+      <span class="row-actions">
+        <button class="mini edit-only" data-act="add-sub" title="Add subheading">+ Subheading</button>
+        <button class="mini edit-only danger" data-act="del-section" title="Delete section">Delete</button>
+      </span></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Level Two
+Shocker Central Response Closing Paragraph:</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Please go to the Shocker Career Accelerator website at:
+https://www.wichita.edu/resumetemplates to explore our resume templates to
+guide your changes. If you have questions or would like to set up an
+appointment with the Shocker Career Accelerator, call our main office at
+316-978-3688 to set up a one-on-one resume review appointment.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Level Three
+Shocker Central Response Closing Paragraph:</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">To help you guide these changes, please call our
+main office at 316-978-3688 to schedule a one-on-one resume review appointment.
+In the meantime, please go to the Shocker Career Accelerator website at https://www.wichita.edu/resumetemplates to explore all our
+resume templates. If we approve your resume without these suggested changes,
+there is no guarantee your document will meet industry standards for your
+future job applications.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Level
+Four with Approval: (Level Four Shocker Central
+Response Template: Student has resubmitted their resume without changes 3 or
+more times.)</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Student, 
+
+Shocker Central shows you have uploaded your resume more
+than once with no changes. Each resume is reviewed by a trained staff member
+with the Shocker Career Accelerator to ensure your document meets industry
+standards. I can tell you have taken a lot of time working on your document,
+but your resume requires multiple changes to make your resume more
+appealing to employers. If we approve your resume without these suggested
+changes, there is no guarantee your document will meet industry standards for
+your future job applications. 
+
+Please call our main office at 316-978-3688 to schedule a
+one-on-one resume review appointment. In the meantime, please go to the Shocker
+Career Accelerator website at https://www.wichita.edu/resumetemplates to
+explore all of our resume templates.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div></div><div class="section" data-level="section" data-role="normal" draggable="false"><div class="section-header">
+      <span class="drag-handle" title="Drag section">☰</span>
+      <strong class="section-title" contenteditable="false">GRAPHIC DESIGN STUDENTS ONLY</strong>
+      <span class="badge">Normal</span>
+      <select class="role edit-only" title="Section role">
+        <option value="normal" selected="">Normal</option>
+        <option value="opening">Opening</option>
+        <option value="closing">Closing</option>
+      </select>
+      <span class="row-actions">
+        <button class="mini edit-only" data-act="add-sub" title="Add subheading">+ Subheading</button>
+        <button class="mini edit-only danger" data-act="del-section" title="Delete section">Delete</button>
+      </span></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Header</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Be sure to include your portfolio link in your contact
+information.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">It is important to include your LinkedIn URL in your contact
+information.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Be sure your LinkedIn profile is consistent with your brand and showcases your work. For your creative resume or in-person resume, it is okay to have a professional summary or profile describing your interests. For your digital or traditional resume, remove your professional summary/profile/objective as this can be described in your bullet points and cover letter.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Content</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Under your skills section, be sure to include
+relevant hard skills or technical skills, such as Adobe Creative Suite, Adobe
+Photoshop, InDesign, Motion Graphics, Print Design, UX Design, and/or Web Design.
+Do not list soft skills such as time management, organization, communication,
+creativity, client relations, etc. Soft skills should be included in your
+bullet points.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">Start your bullet points with a variety of relevant action
+verbs that showcase your skills. Some graphic design and/or fine arts related
+action verbs include, analyzed, collaborated, created, designed, illustrated,
+performed, developed, implemented, presented, enhanced, etc.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">For graphic design and/or fine arts, it is important to
+explain your impact in your bullet points. Add specific numerical values, such
+as how many projects you have completed, how frequently you completed a task,
+how much money you have raised or monitored, etc. Eyes are drawn to numbers.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div><div class="subheading" data-level="subheading" draggable="false"><div class="sub-head">
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="false">Formatting</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span></div><div class="feedback">
+      <input type="checkbox" class="fb-check">
+      <div class="fb-text" contenteditable="false">For your in-person or creative resume, it is fine to show your
+creativity skills that match your personal brand. For your online or digital
+resume, it is important to use an Applicant Tracking System (ATS) friendly
+resume template. Most employers and job websites use this AI (Artificial
+Intelligence) technology to scan documents for potential candidates. Columns,
+tables, charts, color blocks, paragraphs, images, logos, color font, etc. can
+confuse the system and make it difficult for employers to find your document.
+Please reformat your resume using our templates at:
+https://www.wichita.edu/resumetemplates before resubmitting.</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span></div></div></div></div>
+
+  <aside id="generator">
+    <div>
+      <strong>Generated Feedback (Preview)</strong>
+      <div class="hint">Review Mode: check items on the left. Copy/Downloads use your “Student, opening → headers → closing” format.</div>
+    </div>
+    <textarea id="generated" placeholder="Checked feedback will appear here..."></textarea>
+    <div style="display:flex; gap:8px; flex-wrap:wrap">
+      <button id="copyBtn2" class="secondary">Copy</button>
+      <button id="txtBtn2" class="secondary">Download .txt</button>
+      <button id="docBtn2" class="secondary">Download .doc</button>
+    </div>
+  </aside>
+</main>
+
+<!-- SAFE JSON seed for your layout. Replace [] with your JSON “as is”, or Import it. -->
+<script type="application/json" id="seed-json">
+[
+  {
+    "title": "Opening Paragraph",
+    "role": "normal",
+    "subs": [
+      {
+        "title": "Level 1:",
+        "items": [
+          "Use Resume Feedback Email Template on the student’s\nprofile."
+        ]
+      },
+      {
+        "title": "Level 2:",
+        "items": [
+          "Thank you for\nuploading your resume to Shocker Central. Each resume is reviewed by a trained\nstaff member with the Shocker Career Accelerator to ensure your document meets\nindustry standards. It is clear you have put a considerable amount of effort\ninto your document. You have plenty of valuable information presented, but here\nare a few tips and suggested changes to make your resume more appealing to\nemployers."
+        ]
+      },
+      {
+        "title": "Level 3:",
+        "items": [
+          "Thank you for uploading your resume to Shocker Central. Each\nresume is reviewed by a trained staff member with the Shocker Career\nAccelerator to ensure your document meets industry standards. I can tell you have taken a lot of\ntime working on your document. First, I would recommend tailoring your resume\nto the job you are seeking and uploading your resume to the website jobscan.co.\nAdditionally, you have plenty of valuable information presented, but multiple\nchanges will need to be made to make your resume more appealing to employers.\nWithout these changes, there is no guarantee your document will meet industry\nstandards for your future job applications."
+        ]
+      },
+      {
+        "title": "Non PDF Submissions",
+        "items": [
+          "Please upload your document in Shocker Central as a PDF in\norder to receive direct feedback. If you have questions or would like to set up\nan appointment with the Shocker Career Accelerator, call our main office at\n316-978-3688. (Note: Shocker Central will direct you to download a document if\nit is not in PDF format.)"
+        ]
+      },
+      {
+        "title": "Resubmit",
+        "items": [
+          "Hello [student], while all of the information in your resume is valuable to your job search, most employers and job websites use an AI (Artificial Intelligence) technology called the Applicant Tracking System (ATS) to scan documents for potential candidates. Columns, tables, charts, color blocks, paragraphs, images, logos, color font, break lines, etc. can confuse the system and make it difficult for employers to find your document. Please reformat your resume using our templates at: https://www.wichita.edu/resumetemplates before resubmitting. The current formatting of your resume is not ATS-friendly and may result in a decrease in job opportunities. Please reformat your resume using our templates before resubmitting your resume. https://www.wichita.edu/resumetemplates.I look forward to seeing your changes!"
+        ]
+      }
+    ]
+  },
+  {
+    "title": "Quick Formatting",
+    "role": "normal",
+    "subs": [
+      {
+        "title": "New Subheading",
+        "items": [
+          "Most employers and job websites use an AI (Artificial\nIntelligence) technology called the Applicant Tracking System (ATS) to scan\ndocuments for potential candidates. Columns, tables, charts, color blocks,\nparagraphs, images, logos, color font, break lines, etc. can confuse the system\nand make it difficult for employers to find your document. Please reformat your\nresume using our templates at: https://www.wichita.edu/resumetemplates\nbefore resubmitting.",
+          "Please reformat your resume using our templates before\nresubmitting your resume. https://www.wichita.edu/resumetemplates"
+        ]
+      }
+    ]
+  },
+  {
+    "title": "Header",
+    "role": "normal",
+    "subs": [
+      {
+        "title": "Header/ Name",
+        "items": [
+          "Your contact information should include your name, a professional email, city and state, LinkedIn URL, and phone number.",
+          "Your contact information should be together at the top of the page.",
+          "Your contact information should only be included on the first page at the top."
+        ]
+      },
+      {
+        "title": "Email",
+        "items": [
+          "Use a professional email. If you do not have one, please create one.",
+          "Your email is invalid. Use your [wushock@shockers.wichita.edu] email, otherwise, employers will not be able to reach you.",
+          "Only use one email, preferably one you can easily find important emails."
+        ]
+      },
+      {
+        "title": "Location",
+        "items": [
+          "Do not include your full personal address in your contact information for safety reasons. Only include your city and state.",
+          "Include your city and state in your header.",
+          "Make sure your location is relevant to your current job search."
+        ]
+      },
+      {
+        "title": "LinkedIn",
+        "items": [
+          "Remove the numbers from your LinkedIn URL, so it is more professional and easier to search.",
+          "Change the LinkedIn link to a LinkedIn URL, so it is more professional and easier to search."
+        ]
+      },
+      {
+        "title": "Additional fixes",
+        "items": [
+          "Only include your Instagram or YouTube if it relates to your work and degree.",
+          "You do not need to include your WSU student ID.",
+          "Remove your photo. Photos on resumes are limited to models and actors.",
+          "Remove the title under your heading. This can box you in.",
+          "Remove your profile/ objective/ summary statement. This information could be used in your cover letter.",
+          "A professional summary may be appropriate for many employers. However, paragraphs (such as an objective statement or professional summary) on your resume can for the ATS system to parse and extract key information, making your resume less likely to pass through the initial screening stage."
+        ]
+      }
+    ]
+  },
+  {
+    "title": "Education",
+    "role": "normal",
+    "subs": [
+      {
+        "title": "Education",
+        "items": [
+          "Your education should include your major/ degree, the academic institution, location, and graduation month and year.",
+          "Your education degrees and majors should be capitalized like a title.",
+          "Education should be listed first if you are still a student.",
+          "Your Wichita State education should be listed first since that is where you are currently going.",
+          "Don’t forget to add your Wichita State information to your education section.",
+          "Spell out Wichita State University.",
+          "Capitalize Wichita State University.",
+          "Your high school information can stay for now, however after your first year it will need to be removed. This also includes high school groups, clubs, and organizations.",
+          "Remove your secondary/ high school information as it is no longer needed on your resume.",
+          "For your graduation date, only list the expected month and the year.",
+          "Your education should be listed in reverse chronological order, with the most recent degree at the top.",
+          "Remove your GPA unless it is required by an employer or an academic institution.",
+          "Do not forget to include your expected graduation date, be sure to put the month and the year.",
+          "Instead of listing “XX-Present” in your education section, only list your expected graduation month and year.",
+          "Only include schools where you have obtained a finalized degree, like your Associate's, Bachelor's, etc. degrees. Other education can be discussed if you get the opportunity to attend an interview.",
+          "Only include coursework relevant to your degree."
+        ]
+      }
+    ]
+  },
+  {
+    "title": "Relevant Experience OR Work Experience",
+    "role": "normal",
+    "subs": [
+      {
+        "title": "Relevant Experience OR Work Experience",
+        "items": [
+          "In your experience and/or activities section, list your professional title, place of business and location if relevant, and the month and years that you worked there. Underneath your title, list 3-5 concise bullet points of information for your description. Start your bullet points with an action verb that appropriately describes and highlights your skills.",
+          "All information in each section should be listed in reverse chronological order, with the most recent experience listed first.",
+          "Remove your interests and hobbies.",
+          "Do not use your full work addresses. Only include the city and state.",
+          "Do not use more than 5 bullet points for each of your experiences.",
+          "Add specific numerical value examples to a few of your bullet points to add depth to your experiences.",
+          "Work on expanding your bullet points. You can describe how you did the task (your action verb), what you did specifically, and your impact on the job or result. Example: Managed 10 employees daily, assessed performance, and enhanced the customer experience by meeting customer satisfaction goals in all 4 quarters.",
+          "Include a period at the end of each sentence.",
+          "Only include experiences from the past 10 years.",
+          "Your dates should be listed on the far-right side of the page."
+        ]
+      }
+    ]
+  },
+  {
+    "title": "Relevant Skills",
+    "role": "normal",
+    "subs": [
+      {
+        "title": "Relevant Skills",
+        "items": [
+          "In your skills section, soft skills or personality traits, such as communication, time management, and other descriptive words should not be listed, but instead, incorporated into your experiences. Hard skills, such as software, languages, and CPR should be listed on your resume in list format. Do not use columns or paragraphs.",
+          "Add a skills section where you can list your hard skills, such as Microsoft Word, Microsoft Excel, Microsoft PowerPoint, CPR, Google Applications, First Aid, Languages, or other various software applications.",
+          "List your languages under your skills section. Only include English as a language if it isn’t your first language.",
+          "Skills should be listed in a list format. Do not use columns and avoid bullet points if possible.",
+          "Change the skills in your skills sections to hard skills such as Microsoft word, excel, languages or CPR."
+        ]
+      }
+    ]
+  },
+  {
+    "title": "Optional Sections (Coursework, projects, honors, etc.)",
+    "role": "normal",
+    "subs": [
+      {
+        "title": "Optional Sections (Coursework, projects, honors, etc.)",
+        "items": [
+          "List your awards, honors, leadership, certifications, etc. in reverse chronological order. Don’t forget to include the month and year.",
+          "List your relevant coursework in bullet point or list format.",
+          "List your projects by title, date, and 3-5 bullet points describing the project content.",
+          "Call attention to additional relevant experience by adding sections to your resume like organizations, volunteer experiences, awards and honors, professional affiliations, certifications, etc. to make your resume more robust. When doing this, include dates (month and year) that you participated in those events.",
+          "Keep the extracurricular/volunteer experience relevant to the positions you are looking to apply for.",
+          "With your extracurricular/volunteer experience, list each experience by title, location, and date. Make sure to include 1-2 bullet points describing your tasks."
+        ]
+      }
+    ]
+  },
+  {
+    "title": "Spelling/ Grammar",
+    "role": "normal",
+    "subs": [
+      {
+        "title": "Spelling/  Grammar",
+        "items": [
+          "Use past tense verbs when talking about past experiences and\npresent tense when talking about current experiences.",
+          "Make sure you are capitalizing your degree because it is a\ntitle.",
+          "Do not use “I” and “We” statements in your resume.",
+          "Make sure to capitalize the beginning of bullet point and/\nor every bullet point has proper punctuation.",
+          "Please upload your document to Grammarly to check the\nspelling and grammar of this document. https://www.grammarly.com/."
+        ]
+      }
+    ]
+  },
+  {
+    "title": "Professional Language",
+    "role": "normal",
+    "subs": [
+      {
+        "title": "Professional Language",
+        "items": [
+          "Start your bullet points with an action verb that can enhance the reader’s understanding of tasks, duties, transferable skills, and accomplishments.",
+          "Do not use abbreviations in your document.",
+          "Vary your action verbs in your experience bullet points. It is important to use a variety of action verbs to showcase a wide range of skills. If you tend to use the same word, try using the synonym of the word.",
+          "Tailor your resume to each job you are applying to."
+        ]
+      }
+    ]
+  },
+  {
+    "title": "Formatting/ Font",
+    "role": "normal",
+    "subs": [
+      {
+        "title": "Formatting/ Font",
+        "items": [
+          "Most employers and job websites use an AI (Artificial\nIntelligence) technology called the Applicant Tracking System (ATS) to scan\ndocuments for potential candidates. Columns, tables, charts, color blocks, paragraphs,\nimages, logos, color font, etc. can confuse the system and make it difficult\nfor employers to find your document. Please reformat your resume using our\ntemplates at: https://www.wichita.edu/resumetemplates before resubmitting.",
+          "Your document should be a standard letter size of 8.5 x 11.",
+          "Your resume margin size should be 1 inch all around the document. Adjust accordingly.",
+          "When you use a template, make sure you fill in all sections with your information and delete sections not relevant to you.",
+          "Only use a black or dark blue font, so it is easy for employers to read your document.",
+          "Use an easily readable font, such as Times New Roman, Calibri, or Arial, with 10-12 pt font.",
+          "Make sure your dates are spelled out by month and year. For example, April 2022-May 2023.",
+          "Make sure you are using the same font style and size throughout the document.",
+          "Your dates should be listed on the far-right side of the page.",
+          "Be consistent with your bullet point size and",
+          "or indentation.",
+          "Be consistent with your font color.",
+          "All information in each section should include dates and be listed in reverse chronological order, with the most recent experience listed first.",
+          "Add a space after each title or section to make your document less condensed and easier to read. It is okay for your resume to be on two pages.",
+          "Paragraph format makes a document difficult to follow, whereas bullet points catch the eye.",
+          "Please reformat your resume using our templates before\nresubmitting your resume. https://www.wichita.edu/resumetemplates",
+          "I recommend renaming your document something professional,\nsuch as “[your name] Resume 2025”.",
+          "Only use bullet points, do not use numbers."
+        ]
+      }
+    ]
+  },
+  {
+    "title": "Additional Fixes",
+    "role": "normal",
+    "subs": [
+      {
+        "title": "Resume Length",
+        "items": [
+          "Your resume should be no longer than two pages.",
+          "Try fitting your resume onto one page.",
+          "There is a blank page at the end of your document that needs to be removed.",
+          "Although it is okay for your resume to be two pages, since you only have a few lines on your second page, try fitting it all onto the first page."
+        ]
+      },
+      {
+        "title": "Additional Content",
+        "items": [
+          "Remove your references from your resume and only provide these per request on a separate document.",
+          "You do not need to include that your references are available upon request.",
+          "Remove your interests and/or hobbies.",
+          "Remove your declaration."
+        ]
+      }
+    ]
+  },
+  {
+    "title": "Closing Paragraphs",
+    "role": "normal",
+    "subs": [
+      {
+        "title": "Level Two\nShocker Central Response Closing Paragraph:",
+        "items": [
+          "Please go to the Shocker Career Accelerator website at:\nhttps://www.wichita.edu/resumetemplates to explore our resume templates to\nguide your changes. If you have questions or would like to set up an\nappointment with the Shocker Career Accelerator, call our main office at\n316-978-3688 to set up a one-on-one resume review appointment."
+        ]
+      },
+      {
+        "title": "Level Three\nShocker Central Response Closing Paragraph:",
+        "items": [
+          "To help you guide these changes, please call our\nmain office at 316-978-3688 to schedule a one-on-one resume review appointment.\nIn the meantime, please go to the Shocker Career Accelerator website at https://www.wichita.edu/resumetemplates to explore all our\nresume templates. If we approve your resume without these suggested changes,\nthere is no guarantee your document will meet industry standards for your\nfuture job applications."
+        ]
+      },
+      {
+        "title": "Level\nFour with Approval: (Level Four Shocker Central\nResponse Template: Student has resubmitted their resume without changes 3 or\nmore times.)",
+        "items": [
+          "Student, \n\nShocker Central shows you have uploaded your resume more\nthan once with no changes. Each resume is reviewed by a trained staff member\nwith the Shocker Career Accelerator to ensure your document meets industry\nstandards. I can tell you have taken a lot of time working on your document,\nbut your resume requires multiple changes to make your resume more\nappealing to employers. If we approve your resume without these suggested\nchanges, there is no guarantee your document will meet industry standards for\nyour future job applications. \n\nPlease call our main office at 316-978-3688 to schedule a\none-on-one resume review appointment. In the meantime, please go to the Shocker\nCareer Accelerator website at https://www.wichita.edu/resumetemplates to\nexplore all of our resume templates."
+        ]
+      }
+    ]
+  },
+  {
+    "title": "GRAPHIC DESIGN STUDENTS ONLY",
+    "role": "normal",
+    "subs": [
+      {
+        "title": "Header",
+        "items": [
+          "Be sure to include your portfolio link in your contact\ninformation.",
+          "It is important to include your LinkedIn URL in your contact\ninformation.",
+          "Be sure your LinkedIn profile is consistent with your brand and showcases your work. For your creative resume or in-person resume, it is okay to have a professional summary or profile describing your interests. For your digital or traditional resume, remove your professional summary/profile/objective as this can be described in your bullet points and cover letter."
+        ]
+      },
+      {
+        "title": "Content",
+        "items": [
+          "Under your skills section, be sure to include\nrelevant hard skills or technical skills, such as Adobe Creative Suite, Adobe\nPhotoshop, InDesign, Motion Graphics, Print Design, UX Design, and/or Web Design.\nDo not list soft skills such as time management, organization, communication,\ncreativity, client relations, etc. Soft skills should be included in your\nbullet points.",
+          "Start your bullet points with a variety of relevant action\nverbs that showcase your skills. Some graphic design and/or fine arts related\naction verbs include, analyzed, collaborated, created, designed, illustrated,\nperformed, developed, implemented, presented, enhanced, etc.",
+          "For graphic design and/or fine arts, it is important to\nexplain your impact in your bullet points. Add specific numerical values, such\nas how many projects you have completed, how frequently you completed a task,\nhow much money you have raised or monitored, etc. Eyes are drawn to numbers."
+        ]
+      },
+      {
+        "title": "Formatting",
+        "items": [
+          "For your in-person or creative resume, it is fine to show your\ncreativity skills that match your personal brand. For your online or digital\nresume, it is important to use an Applicant Tracking System (ATS) friendly\nresume template. Most employers and job websites use this AI (Artificial\nIntelligence) technology to scan documents for potential candidates. Columns,\ntables, charts, color blocks, paragraphs, images, logos, color font, etc. can\nconfuse the system and make it difficult for employers to find your document.\nPlease reformat your resume using our templates at:\nhttps://www.wichita.edu/resumetemplates before resubmitting."
+        ]
+      }
+    ]
+  }
+]
+</script>
+
+<script>
+/* =========================
+   Utilities & State
+========================= */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+let editMode = false;
+const sectionsRoot = $("#sections-container");
+const outBox = $("#generated");
+
+/* =========================
+   Storage helpers
+========================= */
+function getSaved() {
+  try{ const raw = localStorage.getItem("wsu_feedback_layout_v3"); if(raw) return JSON.parse(raw); }catch{}
+  return null;
+}
+function saveCurrent() {
+  const data = serializeFromDOM();
+  localStorage.setItem("wsu_feedback_layout_v3", JSON.stringify(data));
+  alert("Layout saved to this browser!");
+}
+
+/* =========================
+   Load seed JSON (fallback)
+========================= */
+function loadSeedJson(){
+  const el = document.getElementById("seed-json");
+  if(!el) return null;
+  try{
+    const txt = el.textContent.trim();
+    if(!txt) return null;
+    return JSON.parse(txt);
+  }catch(e){
+    console.error("Invalid JSON in #seed-json", e);
+    return null;
+  }
+}
+
+/* =========================
+   Roles & Normalization
+========================= */
+function normalizeRoles(arr){
+  return (arr||[]).map(sec => ({
+    title: sec.title || "Section",
+    role: (sec.role === "opening" || sec.role === "closing") ? sec.role : "normal",
+    subs: (sec.subs || []).map(sub => ({
+      title: sub.title || "Subheading",
+      items: Array.isArray(sub.items) ? sub.items : []
+    }))
+  }));
+}
+const INITIAL_DATA = normalizeRoles(getSaved() || loadSeedJson() || []);
+
+/* =========================
+   Render
+========================= */
+function render(data){
+  sectionsRoot.innerHTML = "";
+  data.forEach((sec)=>{
+    const secEl = document.createElement("div");
+    secEl.className = "section";
+    secEl.dataset.level = "section";
+    secEl.dataset.role = sec.role || "normal";
+
+    const head = document.createElement("div");
+    head.className = "section-header";
+    head.innerHTML = `
+      <span class="drag-handle" title="Drag section">☰</span>
+      <strong class="section-title" contenteditable="${editMode}">${escapeHtmlInline(sec.title || "Section")}</strong>
+      <span class="badge">${labelForRole(sec.role || "normal")}</span>
+      <select class="role edit-only" title="Section role">
+        <option value="normal"${(sec.role||"normal")==="normal"?" selected":""}>Normal</option>
+        <option value="opening"${sec.role==="opening"?" selected":""}>Opening</option>
+        <option value="closing"${sec.role==="closing"?" selected":""}>Closing</option>
+      </select>
+      <span class="row-actions">
+        <button class="mini edit-only" data-act="add-sub" title="Add subheading">+ Subheading</button>
+        <button class="mini edit-only danger" data-act="del-section" title="Delete section">Delete</button>
+      </span>`;
+    secEl.appendChild(head);
+
+    (sec.subs||[]).forEach((sub)=>{
+      secEl.appendChild(makeSub(sub));
+    });
+
+    sectionsRoot.appendChild(secEl);
+  });
+
+  wireButtons();
+  setupDnD();
+  applyModeVisuals();
+  if(!editMode) generatePreview();
+}
+
+function makeSub(sub){
+  const subEl = document.createElement("div");
+  subEl.className = "subheading";
+  subEl.dataset.level = "subheading";
+
+  const subHead = document.createElement("div");
+  subHead.className = "sub-head";
+  subHead.innerHTML = `
+    <span class="drag-handle" title="Drag subheading">⋮</span>
+    <em class="sub-title" contenteditable="${editMode}">${escapeHtmlInline(sub.title || "Subheading")}</em>
+    <span class="row-actions">
+      <button class="mini edit-only" data-act="add-fb" title="Add feedback">+ Feedback</button>
+      <button class="mini edit-only" data-act="add-fb-multi" title="Mass add (use /)">+ Multi</button>
+      <button class="mini edit-only danger" data-act="del-sub" title="Delete subheading">Delete</button>
+    </span>`;
+  subEl.appendChild(subHead);
+
+  (sub.items||[]).forEach((text)=>{
+    const fb = document.createElement("div");
+    fb.className = "feedback";
+    fb.innerHTML = `
+      <input type="checkbox" class="fb-check" />
+      <div class="fb-text" contenteditable="${editMode}">${escapeHtmlInline(text)}</div>
+      <span class="row-actions">
+        <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+      </span>`;
+    subEl.appendChild(fb);
+  });
+
+  return subEl;
+}
+
+function labelForRole(role){
+  if(role==="opening") return "Opening";
+  if(role==="closing") return "Closing";
+  return "Normal";
+}
+
+/* =========================
+   Serialize
+========================= */
+function serializeFromDOM(){
+  const data = [];
+  $$("#sections-container .section").forEach(secEl=>{
+    const sec = {
+      title: (secEl.querySelector(".section-title")?.textContent || "").trim(),
+      role: (secEl.dataset.role || "normal"),
+      subs: []
+    };
+    secEl.querySelectorAll(".subheading").forEach(subEl=>{
+      const sub = { title: (subEl.querySelector(".sub-title")?.textContent || "").trim(), items: [] };
+      subEl.querySelectorAll(".feedback").forEach(fbEl=>{
+        sub.items.push((fbEl.querySelector(".fb-text")?.textContent || "").trim());
+      });
+      sec.subs.push(sub);
+    });
+    data.push(sec);
+  });
+  return data;
+}
+
+/* =========================
+   Buttons & Controls
+========================= */
+function wireButtons(){
+  // Role select changes
+  $$(".section .role").forEach(sel=>{
+    sel.onchange = ()=>{
+      const secEl = sel.closest(".section");
+      const role = sel.value;
+      secEl.dataset.role = role;
+      const badge = secEl.querySelector(".badge");
+      badge.textContent = labelForRole(role);
+      if(!editMode) generatePreview();
+    };
+  });
+
+  // Section-level buttons
+  $$("#sections-container .section .section-header .row-actions .mini").forEach(btn=>{
+    btn.onclick = ()=>{
+      const act = btn.dataset.act;
+      const secEl = btn.closest(".section");
+      if(act==="add-sub"){
+        const sub = { title: "New Subheading", items: [] };
+        secEl.appendChild(makeSub(sub));
+        applyModeVisuals();
+        setupDnD();
+      }else if(act==="del-section"){
+        if(confirm("Delete this section and all its content?")){
+          secEl.remove();
+          if(!editMode) generatePreview();
+        }
+      }
+    };
+  });
+
+  // Subheading & Feedback-level buttons
+  $$("#sections-container .subheading .row-actions .mini").forEach(btn=>{
+    btn.onclick = ()=>{
+      const act = btn.dataset.act;
+      const subEl = btn.closest(".subheading");
+      if(act==="add-fb"){
+        const fb = document.createElement("div");
+        fb.className = "feedback";
+        fb.innerHTML = `
+          <input type="checkbox" class="fb-check" />
+          <div class="fb-text" contenteditable="${editMode}">New feedback</div>
+          <span class="row-actions">
+            <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+          </span>`;
+        subEl.appendChild(fb);
+      }else if(act==="add-fb-multi"){
+        const raw = prompt("Enter multiple feedback items separated by '/':");
+        if(!raw) return;
+        raw.split("/").map(s=>s.trim()).filter(Boolean).forEach(t=>{
+          const fb = document.createElement("div");
+          fb.className = "feedback";
+          fb.innerHTML = `
+            <input type="checkbox" class="fb-check" />
+            <div class="fb-text" contenteditable="${editMode}">${escapeHtmlInline(t)}</div>
+            <span class="row-actions">
+              <button class="mini edit-only danger" data-act="del-fb">Delete</button>
+            </span>`;
+          subEl.appendChild(fb);
+        });
+      }else if(act==="del-sub"){
+        if(confirm("Delete this subheading and its feedback?")){
+          subEl.remove();
+          if(!editMode) generatePreview();
+        }
+      }else if(act==="del-fb"){
+        const fbEl = btn.closest(".feedback");
+        fbEl.remove();
+        if(!editMode) generatePreview();
+      }
+    };
+  });
+
+  // Checkbox changes → update preview in review mode
+  sectionsRoot.addEventListener("change", e=>{
+    if(e.target.matches(".fb-check") && !editMode){ generatePreview(); }
+  });
+}
+
+/* =========================
+   Mode visuals
+========================= */
+function applyModeVisuals(){
+  document.body.classList.toggle("edit-mode", editMode);
+  $$(".section-title").forEach(el=> el.setAttribute("contenteditable", editMode));
+  $$(".sub-title").forEach(el=> el.setAttribute("contenteditable", editMode));
+  $$(".fb-text").forEach(el=> el.setAttribute("contenteditable", editMode));
+}
+
+/* =========================
+   Drag & Drop (Sections & Subheadings)
+========================= */
+let dragRow = null;
+let placeholder = null;
+
+function makePlaceholder(){
+  if(placeholder && placeholder.isConnected) return placeholder;
+  placeholder = document.createElement("div");
+  placeholder.className = "placeholder";
+  return placeholder;
+}
+function isAfter(target, y){
+  const r = target.getBoundingClientRect();
+  return (y - r.top) > r.height/2;
+}
+function sameLevel(a,b){
+  return a?.dataset?.level && a.dataset.level === b?.dataset?.level;
+}
+
+function setupDnD(){
+  // Clear previous bindings
+  $$("#sections-container .section, #sections-container .subheading").forEach(row=>{
+    row.draggable = false;
+    row.classList.remove("dragging");
+    row.removeEventListener("dragstart", onDragStart);
+    row.removeEventListener("dragover", onDragOver);
+    row.removeEventListener("drop", onDrop);
+    row.removeEventListener("dragend", onDragEnd);
+  });
+
+  if(!editMode) return;
+
+  $$("#sections-container .section, #sections-container .subheading").forEach(row=>{
+    row.draggable = true;
+    row.addEventListener("dragstart", onDragStart);
+    row.addEventListener("dragover", onDragOver);
+    row.addEventListener("drop", onDrop);
+    row.addEventListener("dragend", onDragEnd);
+  });
+}
+
+function onDragStart(e){
+  dragRow = e.currentTarget;
+  dragRow.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", "move"); // Firefox requirement
+}
+function onDragOver(e){
+  e.preventDefault();
+  if(!dragRow) return;
+  const target = e.currentTarget;
+  if(!sameLevel(dragRow, target)) return;
+
+  const ph = makePlaceholder();
+  if(isAfter(target, e.clientY)){
+    target.parentElement.insertBefore(ph, target.nextSibling);
+  }else{
+    target.parentElement.insertBefore(ph, target);
+  }
+}
+function onDrop(e){
+  e.preventDefault();
+  if(!dragRow) return;
+  const target = e.currentTarget;
+  if(!sameLevel(dragRow, target)) return;
+
+  const ph = makePlaceholder();
+  if(ph.parentElement){
+    ph.parentElement.insertBefore(dragRow, ph);
+    ph.remove();
+  }
+}
+function onDragEnd(){
+  if(dragRow) dragRow.classList.remove("dragging");
+  dragRow = null;
+  if(placeholder && placeholder.parentElement) placeholder.parentElement.removeChild(placeholder);
+}
+
+/* =========================
+   Output builder (NO random line breaks)
+   We build:
+   - blocks[] = {role, title?, text} where text is a single paragraph
+   - TEXT output uses blank lines ONLY between paragraphs
+   - HTML output uses <p> with <strong>Title:</strong> when headers included
+========================= */
+function properSentence(s){
+  let t = (s||"").trim();
+  if(!t) return "";
+  t = t.charAt(0).toUpperCase() + t.slice(1);
+  if(!/[.!?]$/.test(t)) t += ".";
+  // Collapse any internal newlines/spaces
+  t = t.replace(/\s*\n\s*/g, " ").replace(/\s{2,}/g, " ");
+  return t;
+}
+
+function collectBlocks(){
+  const includeHeaders = $("#includeHeaders").checked;
+  const openings = [], normals = [], closings = [];
+
+  $$("#sections-container .section").forEach(sec=>{
+    const role = sec.dataset.role || "normal";
+    const title = (sec.querySelector(".section-title")?.textContent || "").trim();
+    const selectedSentences = [];
+
+    sec.querySelectorAll(".subheading .feedback").forEach(fb=>{
+      const cb = fb.querySelector(".fb-check");
+      if(cb && cb.checked){
+        const text = (fb.querySelector(".fb-text")?.textContent || "").trim();
+        if(text) selectedSentences.push(text);
+      }
+    });
+
+    if(selectedSentences.length){
+      const para = selectedSentences.map(properSentence).join(" ").replace(/\s{2,}/g, " ");
+      const block = { role, title: includeHeaders && role==="normal" ? title : null, text: para };
+      if(role==="opening") openings.push(block);
+      else if(role==="closing") closings.push(block);
+      else normals.push(block);
+    }
+  });
+
+  return { openings, normals, closings };
+}
+
+function buildOutputTextAndHtml(){
+  const { openings, normals, closings } = collectBlocks();
+
+  // TEXT — paragraphs separated by ONE blank line; no inline linebreaks
+  const textParts = [];
+  textParts.push("Student,");
+  textParts.push(""); // blank line
+
+  const addTextBlocks = arr=>{
+    arr.forEach(b=>{
+      if(b.title){ textParts.push(b.title + ":"); }
+      textParts.push(b.text);
+      textParts.push(""); // blank after each paragraph
+    });
+  };
+  addTextBlocks(openings);
+  addTextBlocks(normals);
+  addTextBlocks(closings);
+
+  // Trim trailing blank
+  while(textParts.length && textParts[textParts.length-1]==="") textParts.pop();
+  const text = textParts.join("\n");
+
+  // HTML — <p> blocks; headings bold with colon
+  const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const htmlParts = [];
+  htmlParts.push('<p><strong>Student,</strong></p>');
+
+  const addHtmlBlocks = arr=>{
+    arr.forEach(b=>{
+      if(b.title){
+        htmlParts.push(`<p><strong>${esc(b.title)}:</strong> ${esc(b.text)}</p>`);
+      }else{
+        htmlParts.push(`<p>${esc(b.text)}</p>`);
+      }
+    });
+  };
+  addHtmlBlocks(openings);
+  addHtmlBlocks(normals);
+  addHtmlBlocks(closings);
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${htmlParts.join("\n")}</body></html>`;
+  return { text, html };
+}
+
+function generatePreview(){
+  // Preview shows TEXT version exactly as it will copy (no random line breaks)
+  outBox.value = buildOutputTextAndHtml().text;
+}
+
+/* =========================
+   Clipboard & Downloads
+========================= */
+async function copyWithFormatting(){
+  const { text, html } = buildOutputTextAndHtml();
+  outBox.value = text; // keep preview honest
+
+  if (navigator.clipboard && window.ClipboardItem) {
+    try {
+      const item = new ClipboardItem({
+        "text/html": new Blob([html], {type:"text/html"}),
+        "text/plain": new Blob([text], {type:"text/plain"})
+      });
+      await navigator.clipboard.write([item]);
+      alert("Copied with formatting (and plain-text fallback)!");
+      return;
+    } catch (e) {
+      console.warn("ClipboardItem failed, using fallback:", e);
+    }
+  }
+
+  // Fallback: copy plain text (still no random breaks)
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed"; ta.style.left = "-9999px";
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand("copy");
+  document.body.removeChild(ta);
+  alert("Copied as plain text.");
+}
+
+function downloadTxt(){
+  const { text } = buildOutputTextAndHtml();
+  const blob = new Blob([text], {type:"text/plain"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "resume_feedback.txt";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function downloadDoc(){
+  // Use the HTML version so headers stay bold in Word
+  const { html } = buildOutputTextAndHtml();
+  const blob = new Blob([html], {type:"application/msword"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "resume_feedback.doc";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/* =========================
+   Toolbar actions
+========================= */
+$("#toggleMode").addEventListener("click", ()=>{
+  editMode = !editMode;
+  $("#toggleMode").textContent = editMode ? "Switch to Review Mode" : "Switch to Edit Mode";
+  applyModeVisuals();
+  setupDnD();
+  if(!editMode){ generatePreview(); }
+});
+
+$("#saveLayout").addEventListener("click", saveCurrent);
+
+$("#addSection").addEventListener("click", ()=>{
+  if(!editMode){ alert("Switch to Edit Mode to add sections."); return; }
+  const title = prompt("New section title:");
+  if(!title) return;
+  const data = serializeFromDOM();
+  data.push({ title: title.trim(), role: "normal", subs: [] });
+  render(data);
+});
+
+$("#includeHeaders").addEventListener("change", ()=>{ if(!editMode) generatePreview(); });
+
+const doCopy = copyWithFormatting; // upgraded copy (HTML + text)
+
+// Hook buttons
+$("#copyBtn").addEventListener("click", doCopy);
+$("#copyBtn2").addEventListener("click", doCopy);
+
+$("#txtBtn").addEventListener("click", downloadTxt);
+$("#txtBtn2").addEventListener("click", downloadTxt);
+
+$("#docBtn").addEventListener("click", downloadDoc);
+$("#docBtn2").addEventListener("click", downloadDoc);
+
+/* ===== Export / Import / Share ===== */
+$("#exportLayout").addEventListener("click", ()=>{
+  const data = serializeFromDOM();
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "wsu_feedback_layout.json";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+});
+
+$("#importLayout").addEventListener("click", ()=>{
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "application/json";
+  inp.onchange = ()=>{
+    const f = inp.files?.[0]; if(!f) return;
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      try{
+        const data = normalizeRoles(JSON.parse(reader.result));
+        localStorage.setItem("wsu_feedback_layout_v3", JSON.stringify(data));
+        render(data);
+        alert("Layout imported & applied!");
+      }catch(e){
+        alert("Invalid JSON.");
+      }
+    };
+    reader.readAsText(f);
+  };
+  inp.click();
+});
+
+$("#shareLayout").addEventListener("click", ()=>{
+  const data = serializeFromDOM();
+  const currentHtml = document.documentElement.outerHTML;
+  // Inject serialized layout into seed-json block
+  const injected = currentHtml.replace(
+    /(<script type="application\/json" id="seed-json">)[\s\S]*?(<\/script>)/,
+    `$1\n${escapeHtml(JSON.stringify(data, null, 2))}\n$2`
+  );
+  const blob = new Blob([injected], {type:"text/html"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "wsu_feedback_editor_shared.html";
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+});
+
+/* =========================
+   Init
+========================= */
+const saved = getSaved();
+render(saved || INITIAL_DATA);
+applyModeVisuals();
+if(!editMode){ generatePreview(); }
+
+/* =========================
+   Helpers
+========================= */
+function escapeHtmlInline(s){
+  return String(s)
+    .replace(/&/g,"&amp;")
+    .replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;");
+}
+function escapeHtml(s){ return escapeHtmlInline(s); }
+</script>
+
+</body></html>
